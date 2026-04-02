@@ -13,6 +13,7 @@ pub struct Cli {
 pub enum Commands {
     Check(CheckCmd),
     List(ListCmd),
+    Upgrade(UpgradeCmd),
     Config {
         #[command(subcommand)]
         cmd: ConfigCmd,

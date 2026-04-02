@@ -1,8 +1,8 @@
-use crate::utils::monet_scan;
-use serde::Serialize;
-use std::{borrow::Cow, collections::HashMap, path::Path, process::Command};
-use walkdir::WalkDir;
+use crate::utils::{monet_scan, package::get_installed_packages};
 use rayon::prelude::*;
+use serde::Serialize;
+use std::{borrow::Cow, path::Path};
+use walkdir::WalkDir;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct AppInfo {
@@ -15,26 +15,11 @@ pub struct AppInfo {
     pub is_monet_supported_natively: bool,
 }
 
-fn get_installed_packages() -> HashMap<String, String> {
-    let output = Command::new("pm")
-        .args(["list", "packages", "-3", "-f"])
-        .output()
-        .expect("无法执行 pm list packages");
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let mut map = HashMap::new();
-    for line in stdout.lines() {
-        if let Some((apk_part, pkg_name)) = line.rsplit_once('=') 
-            && let Some(apk_path) = apk_part.strip_prefix("package:") 
-        {
-            map.insert(pkg_name.to_string(), apk_path.to_string());
-        }
-    }
-    map
-}
-
 fn get_adapted_packages(uxicons_path: &str) -> Vec<String> {
     let path = Path::new(uxicons_path);
-    if !path.exists() { return vec![]; }
+    if !path.exists() {
+        return vec![];
+    }
     WalkDir::new(path)
         .min_depth(1)
         .max_depth(1)
@@ -44,7 +29,9 @@ fn get_adapted_packages(uxicons_path: &str) -> Vec<String> {
             let entry = e.ok()?;
             if entry.path().is_dir() {
                 Some(entry.file_name().to_string_lossy().to_string())
-            } else { None }
+            } else {
+                None
+            }
         })
         .collect()
 }

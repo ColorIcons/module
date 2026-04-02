@@ -14,6 +14,7 @@ async fn main() -> anyhow::Result<()> {
     match cli.command {
         Commands::Check(cmd) => app::check::run(cmd).await?,
         Commands::List(cmd) => app::list::run(cmd)?,
+        Commands::Upgrade(cmd) => app::upgrade::run(cmd).await?,
         Commands::Config { cmd } => match cmd {
             ConfigCmd::Init(()) => app::config::init()?,
             ConfigCmd::Get(c) => app::config::get(c)?,
