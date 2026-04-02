@@ -49,6 +49,9 @@ jobs:
           toolchain: stable
           override: true
 
+      - name: Add Android target
+        run: rustup target add aarch64-linux-android
+
       - name: Install cargo-ndk
         run: cargo install cargo-ndk
 
@@ -92,12 +95,7 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 24.14.0
-          package-manager-cache: false
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.30.3
-          cache: true
+          package-manager-cache: "pnpm"
 
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
