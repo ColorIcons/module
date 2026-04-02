@@ -146,14 +146,14 @@ jobs:
       - name: Zip module
         run: |
           cd module
-          zip -r ../${{ steps.version.outputs.version }}.zip ./*
+          zip -r ../ColorOSIconsPatch-${{ steps.version.outputs.version }}.zip ./*
           cd ../
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.version }}
-          name: ColorOSIconsPatch-${{ steps.version.outputs.version }}
-          files: ${{ steps.version.outputs.version }}.zip
+          name: ${{ steps.version.outputs.version }}
+          files: ColorOSIconsPatch-${{ steps.version.outputs.version }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
