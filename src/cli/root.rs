@@ -1,6 +1,5 @@
+use crate::cli::{check::CheckCmd, config::ConfigCmd, list::ListCmd};
 use clap::{Parser, Subcommand};
-
-use crate::cli::{config::ConfigCmd, list::ListCmd};
 
 #[derive(Parser)]
 #[command(name = "cip")]
@@ -12,6 +11,7 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
+    Check(CheckCmd),
     List(ListCmd),
     Config {
         #[command(subcommand)]

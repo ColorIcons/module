@@ -4,16 +4,15 @@ mod config;
 mod core;
 mod utils;
 
+use crate::cli::{config::ConfigCmd, root::Commands};
 use clap::Parser;
 use cli::root::Cli;
-
-use crate::cli::{config::ConfigCmd, root::Commands};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
-
     match cli.command {
+        Commands::Check(cmd) => app::check::run(cmd).await?,
         Commands::List(cmd) => app::list::run(cmd)?,
         Commands::Config { cmd } => match cmd {
             ConfigCmd::Init(()) => app::config::init()?,
@@ -21,6 +20,5 @@ async fn main() -> anyhow::Result<()> {
             ConfigCmd::Set(c) => app::config::set(c)?,
         },
     }
-
     Ok(())
 }

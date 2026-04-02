@@ -17,19 +17,14 @@ pub struct GetCmd {
 pub struct SetCmd {
     #[arg(long)]
     pub base_url: Option<String>,
-
     #[arg(long)]
     pub concurrency: Option<usize>,
-
     #[arg(long)]
     pub light: Option<bool>,
-
     #[arg(long)]
     pub dark: Option<bool>,
-
     #[arg(long)]
     pub mat: Option<bool>,
-
     #[arg(long)]
     pub monochrome: Option<bool>,
 }

@@ -1,6 +1,5 @@
-use std::path::PathBuf;
-
 use clap::Args;
+use std::path::PathBuf;
 
 #[derive(Args)]
 pub struct ListCmd {
