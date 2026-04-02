@@ -37,14 +37,11 @@ NEW_VERSIONCODE=$(printf "%03d%02d%01d" "$MAJOR" "$MINOR" "$PATCH")
 # 更新 Cargo.toml
 sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/" Cargo.toml
 
-# 更新 WebUI package.json（子模块）
-jq ".version=\"$NEW_VERSION\"" webui/package.json >webui/package.json.tmp && mv webui/package.json.tmp webui/package.json
-
 # 更新 module/module.prop
 sed -i "s/^version=.*/version=$NEW_VERSION/" module/module.prop
 sed -i "s/^versionCode=.*/versionCode=$NEW_VERSIONCODE/" module/module.prop
 
 # 添加所有改动到 git，推送由 action 做
-git add Cargo.toml webui/package.json module/module.prop
+git add Cargo.toml module/module.prop
 
 echo "Bumped version to $NEW_VERSION (versionCode=$NEW_VERSIONCODE)"

@@ -29,7 +29,6 @@ jobs:
           branch: master
           file_patterns: |
             Cargo.toml
-            webui/package.json
             module/module.prop
           push: true
 
@@ -92,7 +91,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: 20
+          node-version: 24
           cache: "pnpm"
 
       - name: Install Dependencies
@@ -125,7 +124,9 @@ jobs:
 
       - name: Zip module
         run: |
-          zip -r module-${{ steps.version.outputs.version }}.zip module
+          cd module
+          zip -r ../${{ steps.version.outputs.version }}.zip ./*
+          cd ../
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
@@ -138,6 +139,6 @@ jobs:
       - name: Upload module zip to release
         uses: softprops/action-gh-release@v1
         with:
-          files: module-${{ steps.version.outputs.version }}.zip
+          files: ${{ steps.version.outputs.version }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
