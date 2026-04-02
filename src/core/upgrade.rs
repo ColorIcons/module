@@ -7,6 +7,7 @@ use reqwest::Client;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::io::Write;
+use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::{fs, io};
 use tokio::fs as tokio_fs;
@@ -118,7 +119,9 @@ pub async fn upgrade(
                 );
                 download_if_needed(&client_clone, &url, &temp_file, &sha, size, json_mode_clone)
                     .await?;
-                fs::rename(&temp_file, &final_file)?;
+
+                fs::copy(&temp_file, &final_file)?;
+                fs::set_permissions(&final_file, fs::Permissions::from_mode(0o644))?;
                 Ok::<(), anyhow::Error>(())
             }
             .boxed(),
@@ -159,6 +162,7 @@ pub async fn upgrade(
         let pkg_final_dir = storage_root.join(pkg_name);
         fs::create_dir_all(&pkg_temp_dir)?;
         fs::create_dir_all(&pkg_final_dir)?;
+        fs::set_permissions(&pkg_final_dir, fs::Permissions::from_mode(0o755))?;
 
         for mf in &manifest.files {
             if let Some(var) = &mf.variant
@@ -202,7 +206,14 @@ pub async fn upgrade(
                         json_mode_clone,
                     )
                     .await?;
-                    fs::rename(&temp_file, &final_file)?;
+
+                    if let Some(parent) = final_file.parent() {
+                        fs::create_dir_all(parent)?;
+                        fs::set_permissions(parent, fs::Permissions::from_mode(0o755))?;
+                    }
+
+                    fs::copy(&temp_file, &final_file)?;
+                    fs::set_permissions(&final_file, fs::Permissions::from_mode(0o644))?;
                     Ok::<(), anyhow::Error>(())
                 }
                 .boxed(),
