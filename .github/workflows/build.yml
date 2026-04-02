@@ -85,6 +85,9 @@ jobs:
           key: cargo-build-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: cargo-build-
 
+      - name: Add Android target
+        run: rustup target add aarch64-linux-android
+
       - name: Build Rust project for Android arm64-v8a
         run: cargo ndk -t arm64-v8a build --release
 
