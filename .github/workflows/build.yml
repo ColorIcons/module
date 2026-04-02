@@ -9,6 +9,8 @@ jobs:
   bump_version:
     name: Bump Version
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
     steps:
       - name: Checkout Code with Submodules
         uses: actions/checkout@v5
@@ -31,6 +33,12 @@ jobs:
             Cargo.toml
             module/module.prop
           push: true
+
+      - name: Get new version
+        id: get_version
+        run: |
+          VERSION=$(grep '^version =' Cargo.toml | head -n1 | cut -d '"' -f2)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
   rust:
     name: Rust Build (Android arm64)
@@ -72,10 +80,10 @@ jobs:
       - name: Build Rust project for Android arm64-v8a
         run: cargo ndk -t arm64-v8a build --release
 
-      - name: Copy Rust binary to module
+      - name: Copy Rust binary to module/bin
         run: |
           mkdir -p module
-          cp target/aarch64-linux-android/release/cip module/
+          cp target/aarch64-linux-android/release/cip module
 
   webui:
     name: WebUI Build
@@ -123,6 +131,7 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0
+          tags: true
 
       - name: Set Version
         id: version
@@ -143,6 +152,7 @@ jobs:
           git config user.email "github-actions@users.noreply.github.com"
           git tag -a "$VERSION" -m "Release $VERSION"
           git push origin "$VERSION"
+          git fetch --tags
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
