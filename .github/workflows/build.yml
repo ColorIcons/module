@@ -7,7 +7,7 @@ on:
 
 jobs:
   bump_version:
-    name: Bump Version
+    name: Bump Version & Tag
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.get_version.outputs.version }}
@@ -24,7 +24,7 @@ jobs:
       - name: Run bump_version script
         run: bash ./scripts/bump_version.sh
 
-      - name: Commit & Push version bump
+      - name: Commit version bump
         uses: stefanzweifel/git-auto-commit-action@v4
         with:
           commit_message: "ci: bump version"
@@ -39,6 +39,15 @@ jobs:
         run: |
           VERSION=$(grep '^version =' Cargo.toml | head -n1 | cut -d '"' -f2)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create Git tag
+        id: create_tag
+        run: |
+          VERSION=${{ steps.get_version.outputs.version }}
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git tag -a "$VERSION" -m "Release $VERSION"
+          git push origin "$VERSION"
 
   rust:
     name: Rust Build (Android arm64)
@@ -145,15 +154,6 @@ jobs:
           zip -r ../${{ steps.version.outputs.version }}.zip ./*
           cd ../
 
-      - name: Create Git tag
-        run: |
-          VERSION=${{ steps.version.outputs.version }}
-          git config user.name "github-actions"
-          git config user.email "github-actions@users.noreply.github.com"
-          git tag -a "$VERSION" -m "Release $VERSION"
-          git push origin "$VERSION"
-          git fetch --tags
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
@@ -168,3 +168,11 @@ jobs:
           files: ${{ steps.version.outputs.version }}.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          VERSION=${{ needs.bump_version.outputs.version }}
+          git tag -d "$VERSION" || true
+          git push origin ":refs/tags/$VERSION" || true
+          git reset --hard HEAD~1 || true
