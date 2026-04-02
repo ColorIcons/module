@@ -1,11 +1,6 @@
-use std::{
-    collections::HashMap,
-    fs,
-    path::{Path, PathBuf},
-};
+use std::{fs, path::Path};
 
-use reqwest::Client;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::core::types::Index;
 
@@ -17,7 +12,7 @@ struct CheckResult {
 }
 
 pub async fn check(base_url: &str, local_index_path: &Path, json_mode: bool) -> anyhow::Result<()> {
-    let new_index: Index = reqwest::get(format!("{}/index.json", base_url))
+    let new_index: Index = reqwest::get(format!("{}/index.json", base_url.trim_end_matches('/')))
         .await?
         .json()
         .await?;

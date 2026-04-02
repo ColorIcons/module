@@ -58,7 +58,7 @@ pub async fn upgrade(
 
     let client = Client::new();
     let index_bytes = client
-        .get(format!("{}/index.json", base_url))
+        .get(format!("{}/index.json", base_url.trim_end_matches('/')))
         .send()
         .await?
         .bytes()
@@ -77,7 +77,7 @@ pub async fn upgrade(
     for (file_name, file_info) in &index.global.files {
         let temp_file = temp_path.join(file_name);
         let final_file = storage_root.join(file_name);
-        let url = format!("{}/{}", base_url, file_name);
+        let url = format!("{}/global/{}", base_url.trim_end_matches('/'), file_name);
         let sha = file_info.sha256.clone();
         let size = file_info.size;
         let client_clone = client.clone();
@@ -104,7 +104,7 @@ pub async fn upgrade(
             continue;
         }
 
-        let manifest_url = format!("{}/{}", base_url, pkg_info.manifest);
+        let manifest_url = format!("{}/{}", base_url.trim_end_matches('/'), pkg_info.manifest);
         let manifest_bytes = client.get(&manifest_url).send().await?.bytes().await?;
         let manifest: Manifest = serde_json::from_slice(&manifest_bytes)?;
 
@@ -114,18 +114,14 @@ pub async fn upgrade(
         fs::create_dir_all(&pkg_final_dir)?;
 
         for mf in &manifest.files {
-            if !mf.required {
-                continue;
-            }
-
             // 根据 config 过滤图标
             if let Some(var) = &mf.variant 
-                && !should_download_variant(var, &config.icons) 
+                && !should_download_variant(var, &config.icons) && !mf.required
             {
                 continue;
             }
 
-            let file_url = format!("{}/packages/{}/{}", base_url, pkg_name, mf.file);
+            let file_url = format!("{}/packages/{}/{}", base_url.trim_end_matches('/'), pkg_name, mf.file);
             let temp_file = pkg_temp_dir.join(&mf.file);
             let final_file = pkg_final_dir.join(&mf.file);
             let sha = mf.sha256.clone().unwrap_or_default();

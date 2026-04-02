@@ -1,4 +1,4 @@
-use crate::cli::{check::CheckCmd, config::ConfigCmd, list::ListCmd};
+use crate::cli::{check::CheckCmd, config::ConfigCmd, list::ListCmd, upgrade::UpgradeCmd};
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
