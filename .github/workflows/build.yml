@@ -1,0 +1,143 @@
+name: Module Build
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  bump_version:
+    name: Bump Version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code with Submodules
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
+      - name: Run bump_version script
+        run: bash ./scripts/bump_version.sh
+
+      - name: Commit & Push version bump
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: "ci: bump version"
+          branch: master
+          file_patterns: |
+            Cargo.toml
+            webui/package.json
+            module/module.prop
+          push: true
+
+  rust:
+    name: Rust Build (Android arm64)
+    runs-on: ubuntu-latest
+    needs: [bump_version]
+    steps:
+      - name: Checkout Code with Submodules
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cargo-registry-
+
+      - name: Cache Cargo build
+        uses: actions/cache@v3
+        with:
+          path: target
+          key: cargo-build-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cargo-build-
+
+      - name: Build Rust project for Android arm64-v8a
+        run: cargo ndk -t arm64-v8a build --release
+
+      - name: Copy Rust binary to module/bin
+        run: |
+          mkdir -p module/bin
+          cp target/aarch64-linux-android/release/$(basename $(pwd)) module/bin/
+
+  webui:
+    name: WebUI Build
+    runs-on: ubuntu-latest
+    needs: [bump_version]
+    defaults:
+      run:
+        working-directory: ./webui
+    steps:
+      - name: Checkout Code with Submodules
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+          cache: "pnpm"
+
+      - name: Install Dependencies
+        run: pnpm install
+
+      - name: Build WebUI
+        run: pnpm run build
+
+      - name: Copy WebUI to module/webroot
+        run: |
+          mkdir -p ../module/webroot
+          cp -r dist/* ../module/webroot/
+
+  release:
+    name: Package & Release Module
+    runs-on: ubuntu-latest
+    needs: [rust, webui]
+    steps:
+      - name: Checkout Code with Submodules
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Set Version
+        id: version
+        run: |
+          VERSION=$(grep '^version =' Cargo.toml | head -n1 | cut -d '"' -f2)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Zip module
+        run: |
+          zip -r module-${{ steps.version.outputs.version }}.zip module
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: ${{ steps.version.outputs.version }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload module zip to release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: module-${{ steps.version.outputs.version }}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
