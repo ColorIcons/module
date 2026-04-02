@@ -7,10 +7,11 @@ on:
 
 jobs:
   bump_version:
-    name: Bump Version & Temp Tag
+    name: Bump Version
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.get_version.outputs.version }}
+      version_commit_hash: ${{ steps.get_hash.outputs.version_commit_hash }}
     steps:
       - name: Checkout Code with Submodules
         uses: actions/checkout@v5
@@ -25,20 +26,22 @@ jobs:
         run: bash ./scripts/bump_version.sh
 
       - name: Commit version bump
-        uses: stefanzweifel/git-auto-commit-action@v4
-        with:
-          commit_message: "ci: bump version"
-          branch: master
-          file_patterns: |
-            Cargo.toml
-            module/module.prop
-          push: false
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git diff --cached --quiet || git commit -m "ci: bump version"
 
       - name: Get new version
         id: get_version
         run: |
           VERSION=$(grep '^version =' Cargo.toml | head -n1 | cut -d '"' -f2)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Get commit hash
+        id: get_hash
+        run: |
+          HASH=$(git rev-parse HEAD)
+          echo "version_commit_hash=$HASH" >> $GITHUB_OUTPUT
 
   rust:
     name: Rust Build (Android arm64)
@@ -124,7 +127,7 @@ jobs:
   release:
     name: Package & Release Module
     runs-on: ubuntu-latest
-    needs: [rust, webui]
+    needs: [rust, webui, bump_version]
     steps:
       - name: Checkout Code with Submodules
         uses: actions/checkout@v5
@@ -139,17 +142,21 @@ jobs:
           VERSION=$(grep '^version =' Cargo.toml | head -n1 | cut -d '"' -f2)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
+      - name: Cherry-pick version bump commit
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git fetch origin master
+          git checkout master
+          git cherry-pick ${{ needs.bump_version.outputs.version_commit_hash }}
+          git push origin master
+
       - name: Zip module
         run: |
           cd module
           zip -r ../${{ steps.version.outputs.version }}.zip ./*
           cd ../
 
-      - name: Push version bump
-        run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@users.noreply.github.com"
-          git push origin master
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
