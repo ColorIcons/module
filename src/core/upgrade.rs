@@ -38,6 +38,7 @@ pub async fn upgrade(
     base_url: &str,
     storage_root: &Path,
     temp_path: &Path,
+    index_path: &Path,
     config: &Config,
     json_mode: bool,
 ) -> anyhow::Result<()> {
@@ -45,9 +46,6 @@ pub async fn upgrade(
         json_mode,
         json!({"type":"stage","value":"init","message":"Preparing directories"}),
     );
-
-    fs::create_dir_all(temp_path)?;
-    fs::create_dir_all(storage_root)?;
 
     let installed = get_installed_packages();
 
@@ -65,6 +63,16 @@ pub async fn upgrade(
         .await?;
     let index: Index = serde_json::from_slice(&index_bytes)?;
 
+    // 读取旧的 index.json
+    let old_index: Option<Index> = if index_path.exists() {
+        match fs::read(index_path) {
+            Ok(old_bytes) => serde_json::from_slice(&old_bytes).ok(),
+            Err(_) => None,
+        }
+    } else {
+        None
+    };
+
     emit(
         json_mode,
         json!({"type":"info","value":"version","message":format!("Index version: {}", index.repo_version)}),
@@ -74,12 +82,31 @@ pub async fn upgrade(
         FuturesUnordered::new();
 
     // 下载 global 文件
-    for (file_name, file_info) in &index.global.files {
+    for (file_name, new_file_info) in &index.global.files {
+        let should_download = match &old_index {
+            Some(old) => {
+                if let Some(old_info) = old.global.files.get(file_name) {
+                    old_info.sha256 != new_file_info.sha256 || old_info.size != new_file_info.size
+                } else {
+                    true
+                }
+            }
+            None => true,
+        };
+
+        if !should_download {
+            emit(
+                json_mode,
+                json!({"type":"info","message":format!("Skipped (up-to-date): {}", file_name)}),
+            );
+            continue;
+        }
+
         let temp_file = temp_path.join(file_name);
         let final_file = storage_root.join(file_name);
         let url = format!("{}/global/{}", base_url.trim_end_matches('/'), file_name);
-        let sha = file_info.sha256.clone();
-        let size = file_info.size;
+        let sha = new_file_info.sha256.clone();
+        let size = new_file_info.size;
         let client_clone = client.clone();
         let json_mode_clone = json_mode;
 
@@ -99,12 +126,32 @@ pub async fn upgrade(
     }
 
     // 下载已安装应用的图标
-    for (pkg_name, pkg_info) in &index.packages {
+    for (pkg_name, new_pkg_info) in &index.packages {
         if !installed.contains_key(pkg_name) {
             continue;
         }
 
-        let manifest_url = format!("{}/{}", base_url.trim_end_matches('/'), pkg_info.manifest);
+        let old_pkg_version = old_index
+            .as_ref()
+            .and_then(|o| o.packages.get(pkg_name))
+            .map(|p| p.version.clone());
+
+        if let Some(old_ver) = old_pkg_version
+            && old_ver == new_pkg_info.version {
+                emit(json_mode, json!({
+                    "type":"info",
+                    "package": pkg_name,
+                    "message": "Skipped (version up-to-date)"
+                }));
+                continue;
+            }
+
+        // 下载新 manifest
+        let manifest_url = format!(
+            "{}/{}",
+            base_url.trim_end_matches('/'),
+            new_pkg_info.manifest
+        );
         let manifest_bytes = client.get(&manifest_url).send().await?.bytes().await?;
         let manifest: Manifest = serde_json::from_slice(&manifest_bytes)?;
 
@@ -114,14 +161,18 @@ pub async fn upgrade(
         fs::create_dir_all(&pkg_final_dir)?;
 
         for mf in &manifest.files {
-            // 根据 config 过滤图标
-            if let Some(var) = &mf.variant 
+            if let Some(var) = &mf.variant
                 && !should_download_variant(var, &config.icons) && !mf.required
             {
                 continue;
             }
 
-            let file_url = format!("{}/packages/{}/{}", base_url.trim_end_matches('/'), pkg_name, mf.file);
+            let file_url = format!(
+                "{}/packages/{}/{}",
+                base_url.trim_end_matches('/'),
+                pkg_name,
+                mf.file
+            );
             let temp_file = pkg_temp_dir.join(&mf.file);
             let final_file = pkg_final_dir.join(&mf.file);
             let sha = mf.sha256.clone().unwrap_or_default();
@@ -159,8 +210,25 @@ pub async fn upgrade(
         }
     }
 
+    // 等待所有下载任务完成
     while let Some(res) = tasks.next().await {
         res?;
+    }
+
+    // 更新本地 index.json
+    tokio_fs::write(index_path, serde_json::to_vec(&index)?).await?;
+    emit(
+        json_mode,
+        json!({"type":"info","message":"index.json updated"}),
+    );
+
+    // 清理临时目录
+    if temp_path.exists() {
+        tokio_fs::remove_dir_all(temp_path).await.ok();
+        emit(
+            json_mode,
+            json!({"type":"info","message":"Cleaned temporary files"}),
+        );
     }
 
     emit(

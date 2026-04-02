@@ -15,8 +15,17 @@ pub async fn run(cmd: UpgradeCmd) -> anyhow::Result<()> {
     let base_url = &config.repo.base_url;
     let storage_root = model::STORAGE_ROOT.clone();
     let temp_path = model::TEMP_PATH.clone();
+    let index_path = model::INDEX_FILE_PATH.clone();
 
-    upgrade::upgrade(base_url, &storage_root, &temp_path, &config, cmd.json).await?;
+    upgrade::upgrade(
+        base_url,
+        &storage_root,
+        &temp_path,
+        &index_path,
+        &config,
+        cmd.json,
+    )
+    .await?;
 
     Ok(())
 }

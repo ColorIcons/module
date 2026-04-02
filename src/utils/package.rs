@@ -8,8 +8,8 @@ pub fn get_installed_packages() -> HashMap<String, String> {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let mut map = HashMap::new();
     for line in stdout.lines() {
-        if let Some((apk_part, pkg_name)) = line.rsplit_once('=') 
-            && let Some(apk_path) = apk_part.strip_prefix("package:") 
+        if let Some((apk_part, pkg_name)) = line.rsplit_once('=')
+            && let Some(apk_path) = apk_part.strip_prefix("package:")
         {
             map.insert(pkg_name.to_string(), apk_path.to_string());
         }
