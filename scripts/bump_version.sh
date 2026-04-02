@@ -41,7 +41,9 @@ sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/" Cargo.toml
 sed -i "s/^version=.*/version=$NEW_VERSION/" module/module.prop
 sed -i "s/^versionCode=.*/versionCode=$NEW_VERSIONCODE/" module/module.prop
 
+cargo update
+
 # 添加所有改动到 git，推送由 action 做
-git add Cargo.toml module/module.prop
+git add Cargo.toml module/module.prop Cargo.lock
 
 echo "Bumped version to $NEW_VERSION (versionCode=$NEW_VERSIONCODE)"
