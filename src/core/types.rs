@@ -14,6 +14,13 @@ pub struct Index {
 pub struct GlobalIndex {
     pub version: String,
     pub files: HashMap<String, FileInfo>,
+    pub packages: HashMap<String, GlobalPackageManifest>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GlobalPackageManifest {
+    pub version: String,
+    pub files: HashMap<String, FileInfo>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

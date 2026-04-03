@@ -46,7 +46,7 @@ pub fn check_monet(apk_path: &str) -> Option<App> {
     None
 }
 
-pub fn scan_dir(dir: &str) -> Vec<App> {
+pub fn _scan_dir(dir: &str) -> Vec<App> {
     let apk_paths: Vec<String> = WalkDir::new(dir)
         .into_iter()
         .filter_map(|e| e.ok())
