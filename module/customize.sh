@@ -14,17 +14,23 @@ PERSIST_DIR="$PERSIST_BASE/$MODID"
 OLD_UXICONS_DST="/data/adb/modules/$MODID/uxicons"
 UXICONS_DST="$MODPATH/uxicons"
 
-mkdir -p "$UXICONS_DST" || abort "Create uxicons folder failed"
-
 if [ -d "$OLD_UXICONS_DST" ]; then
-  ui_print "- Found icons in module folder, copying..."
-  if (tar -C "$OLD_UXICONS_DST" -cf - . | tar -C "$UXICONS_DST" -xf -); then
+  ui_print "- Found icons in module folder, migrating..."
+
+  if mv "$OLD_UXICONS_DST" "$UXICONS_DST"; then
     ui_print "- Migration completed"
   else
-    ui_print "- Migration failed!"
+    ui_print "- Move failed, attempting compatibility copy..."
+    mkdir -p "$UXICONS_DST"
+    if cp -af "$OLD_UXICONS_DST/." "$UXICONS_DST/"; then
+      ui_print "- Copy completed"
+    else
+      ui_print "- Critical: Migration failed"
+    fi
   fi
 else
   ui_print "- No icons found in module folder"
+  mkdir -p "$UXICONS_DST"
 fi
 
 CIP_BIN="$MODPATH/cip"
