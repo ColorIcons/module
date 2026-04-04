@@ -11,7 +11,6 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::Instant;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 
@@ -73,6 +72,17 @@ async fn download_file(
     Ok(())
 }
 
+fn should_download_package(force_update: bool, old_ver: Option<&String>, new_ver: &str) -> bool {
+    if force_update {
+        return true;
+    }
+
+    match old_ver {
+        Some(v) => v != new_ver,
+        None => true,
+    }
+}
+
 pub async fn upgrade(
     base_url: &str,
     storage_root: &Path,
@@ -83,27 +93,7 @@ pub async fn upgrade(
     let installed = get_installed_packages();
     let client = Client::new();
 
-    emit(
-        json_mode,
-        json!({"type":"stage","value":"fetch","message":"Fetching index.json"}),
-    );
-
-    let start_fetch = Instant::now();
-    let index_bytes = client
-        .get(format!("{}/index.json", base_url.trim_end_matches('/')))
-        .send()
-        .await?
-        .error_for_status()?
-        .bytes()
-        .await?;
-    let index: Index = serde_json::from_slice(&index_bytes)?;
-    emit(
-        json_mode,
-        json!({"type":"time","stage":"fetch_index","duration_ms": start_fetch.elapsed().as_millis()}),
-    );
-
-    // 读取旧 index
-    let old_index: Option<Index> = if index_path.exists() {
+    let local_index: Option<Index> = if index_path.exists() {
         fs::read(index_path)
             .await
             .ok()
@@ -112,14 +102,49 @@ pub async fn upgrade(
         None
     };
 
-    let mut total_tasks = 0usize;
+    let mut force_update = false;
+    if let Some(local_index) = &local_index {
+        if local_index.icons != config.icons {
+            force_update = true;
+        }
+    } else {
+        force_update = true;
+    }
 
+    let index: Index = {
+        emit(
+            json_mode,
+            json!({"type":"stage","value":"fetch","message":"Fetching index.json"}),
+        );
+
+        let index_bytes = client
+            .get(format!("{}/index.json", base_url.trim_end_matches('/')))
+            .send()
+            .await?
+            .error_for_status()?
+            .bytes()
+            .await?;
+        let remote_index: Index = serde_json::from_slice(&index_bytes)?;
+
+        if !force_update && let Some(local_index) = &local_index
+            && local_index.repo_version >= remote_index.repo_version
+            && local_index.generated_at >= remote_index.generated_at
+        {
+            emit(json_mode, json!({"type":"done","message":"Already up-to-date"}));
+            return Ok(());
+        }
+
+        remote_index
+    };
+
+    let old_index = local_index;
+
+    let mut total_tasks = 0usize;
     let should_download = |old: Option<&FileInfo>, new: &FileInfo| match old {
         Some(o) => o.sha256 != new.sha256 || o.size != new.size,
         None => true,
     };
 
-    // 统计任务
     for (file_name, info) in &index.global.files {
         if should_download(
             old_index
@@ -146,13 +171,17 @@ pub async fn upgrade(
         if !installed.contains_key(pkg_name) {
             continue;
         }
+
         let old_ver = old_index
             .as_ref()
             .and_then(|o| o.packages.get(pkg_name.as_str()))
             .map(|p| p.version.clone());
-        if let Some(old_ver) = old_ver && old_ver == new_pkg_info.version {
+
+        // 强制更新时，不比较版本，直接下载
+        if !should_download_package(force_update, old_ver.as_ref(), &new_pkg_info.version) {
             continue;
         }
+
         total_tasks += 1;
     }
 
@@ -160,7 +189,7 @@ pub async fn upgrade(
     let downloaded_packages = Arc::new(AtomicUsize::new(0));
     let mut tasks: FuturesUnordered<_> = FuturesUnordered::new();
 
-    // global files
+    // 下载 global files
     for (file_name, info) in &index.global.files {
         if !should_download(
             old_index
@@ -191,6 +220,7 @@ pub async fn upgrade(
         );
     }
 
+    // 下载 global packages
     for (pkg_name, global_pkg) in &index.global.packages {
         let old_pkg = old_index
             .as_ref()
@@ -227,6 +257,7 @@ pub async fn upgrade(
         }
     }
 
+    // 下载 packages
     for (pkg_name, new_pkg_info) in &index.packages {
         if !installed.contains_key(pkg_name) {
             continue;
@@ -237,7 +268,7 @@ pub async fn upgrade(
             .and_then(|o| o.packages.get(pkg_name.as_str()))
             .map(|p| p.version.clone());
 
-        if let Some(old_ver) = old_ver && old_ver == new_pkg_info.version {
+        if !should_download_package(force_update, old_ver.as_ref(), &new_pkg_info.version) {
             continue;
         }
 
@@ -254,7 +285,6 @@ pub async fn upgrade(
             .await?;
 
         let manifest: Manifest = serde_json::from_slice(&manifest_bytes)?;
-
         let mut pkg_tasks: FuturesUnordered<_> = FuturesUnordered::new();
 
         for mf in &manifest.files {
@@ -303,6 +333,9 @@ pub async fn upgrade(
     while let Some(res) = tasks.next().await {
         res?;
     }
+
+    let mut index = index;
+    index.icons = config.icons.clone();
 
     fs::write(index_path, serde_json::to_vec(&index)?).await?;
 

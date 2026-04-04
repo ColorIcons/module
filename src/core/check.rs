@@ -2,7 +2,7 @@ use std::{fs, path::Path};
 
 use serde::Serialize;
 
-use crate::core::types::Index;
+use crate::{config::model::Config, core::types::Index};
 
 #[derive(Debug, Serialize)]
 struct CheckResult {
@@ -11,7 +11,12 @@ struct CheckResult {
     new_generated_at: u64,
 }
 
-pub async fn check(base_url: &str, local_index_path: &Path, json_mode: bool) -> anyhow::Result<()> {
+pub async fn check(
+    config: &Config,
+    local_index_path: &Path,
+    json_mode: bool,
+) -> anyhow::Result<()> {
+    let base_url = &config.repo.base_url;
     let new_index: Index = reqwest::get(format!("{}/index.json", base_url.trim_end_matches('/')))
         .await?
         .json()
@@ -25,9 +30,14 @@ pub async fn check(base_url: &str, local_index_path: &Path, json_mode: bool) -> 
         None
     };
 
-    let updated = old_index
+    let icons_match = old_index
         .as_ref()
-        .is_none_or(|old| old.generated_at < new_index.generated_at);
+        .is_some_and(|old| old.icons == config.icons);
+
+    let updated = match &old_index {
+        Some(old) => old.generated_at < new_index.generated_at || !icons_match,
+        None => true,
+    };
 
     if json_mode {
         let result = CheckResult {

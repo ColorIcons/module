@@ -14,7 +14,7 @@ pub async fn run(cmd: CheckCmd) -> anyhow::Result<()> {
     let config = loader::load(path)?;
     let index = model::INDEX_FILE_PATH.clone();
 
-    check::check(&config.repo.base_url, &index, cmd.json).await?;
+    check::check(&config, &index, cmd.json).await?;
 
     Ok(())
 }

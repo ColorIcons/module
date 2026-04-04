@@ -19,7 +19,7 @@ pub struct Config {
     pub repo: Repo,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default, PartialEq, Clone)]
 pub struct Icons {
     pub light: bool,
     pub dark: bool,
