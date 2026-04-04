@@ -54,6 +54,7 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0
+          ref: ${{ needs.bump_version.outputs.version_commit_hash }}
 
       # --- Rust Build ---
       - name: Setup Rust
