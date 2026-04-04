@@ -83,7 +83,6 @@ pub async fn upgrade(
         json!({"type":"stage","value":"fetch","message":"Fetching index.json"}),
     );
 
-    // 获取最新 index.json
     let start_fetch = Instant::now();
     let index_bytes = client
         .get(format!("{}/index.json", base_url.trim_end_matches('/')))
@@ -320,7 +319,6 @@ pub async fn upgrade(
         json!({"type":"time","stage":"download_local_packages","duration_ms": start_local_packages.elapsed().as_millis()}),
     );
 
-    // 更新 index.json
     fs::write(index_path, serde_json::to_vec(&index)?).await?;
     emit(
         json_mode,
