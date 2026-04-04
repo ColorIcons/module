@@ -105,12 +105,16 @@ pub fn set(cmd: SetCmd) -> Result<()> {
     }
 
     if icons_changed {
-        let content = fs::read_to_string(&index_path)?;
-        let mut index: Index = serde_json::from_str(&content)?;
+        match fs::read_to_string(&index_path) {
+            Ok(content) => {
+                let mut index: Index = serde_json::from_str(&content)?;
+                index.generated_at = index.generated_at.saturating_sub(100);
 
-        index.generated_at = index.generated_at.saturating_sub(100);
-
-        fs::write(&index_path, serde_json::to_string_pretty(&index)?)?;
+                fs::write(&index_path, serde_json::to_string_pretty(&index)?)?;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.into()),
+        }
     }
 
     fs::write(&path, doc.to_string())?;
