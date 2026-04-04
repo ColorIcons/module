@@ -18,7 +18,11 @@ mkdir -p "$UXICONS_DST" || abort "Create uxicons folder failed"
 
 if [ -d "$OLD_UXICONS_DST" ]; then
   ui_print "- Found icons in module folder, copying..."
-  cp -r "$OLD_UXICONS_DST/." "$UXICONS_DST/" || ui_print "- Copy failed"
+  if (tar -C "$OLD_UXICONS_DST" -cf - . | tar -C "$UXICONS_DST" -xf -); then
+    ui_print "- Migration completed"
+  else
+    ui_print "- Migration failed!"
+  fi
 else
   ui_print "- No icons found in module folder"
 fi
