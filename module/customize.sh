@@ -11,11 +11,17 @@ MODID="$(grep -m1 '^id=' "$MODPATH/module.prop" | cut -d= -f2)"
 PERSIST_BASE="/data/adb"
 PERSIST_DIR="$PERSIST_BASE/$MODID"
 
-RUNTIME_DIR="$PERSIST_DIR/runtime"
+OLD_UXICONS_DST="/data/adb/modules/$MODID/uxicons"
+UXICONS_DST="$MODPATH/uxicons"
 
-UXICONS_DST="uxicons"
+mkdir -p "$UXICONS_DST" || abort "Create uxicons folder failed"
 
-mkdir -p "$MODPATH/$UXICONS_DST"
+if [ -d "$OLD_UXICONS_DST" ]; then
+  ui_print "- Found icons in module folder, copying..."
+  cp -r "$OLD_UXICONS_DST/." "$UXICONS_DST/" || ui_print "- Copy failed"
+else
+  ui_print "- No icons found in module folder"
+fi
 
 CIP_BIN="$MODPATH/cip"
 
@@ -25,7 +31,7 @@ set_perm "$CIP_BIN" 0 0 0755
 ui_print "- ColorOS Icons Patch"
 ui_print "- Using persist dir: $PERSIST_DIR"
 
-mkdir -p "$RUNTIME_DIR" || abort "Create persist dir failed"
+mkdir -p "$PERSIST_DIR" || abort "Create persist dir failed"
 
 [ -x "$CIP_BIN" ] || abort "cip binary not found"
 
