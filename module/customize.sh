@@ -11,27 +11,9 @@ MODID="$(grep -m1 '^id=' "$MODPATH/module.prop" | cut -d= -f2)"
 PERSIST_BASE="/data/adb"
 PERSIST_DIR="$PERSIST_BASE/$MODID"
 
-OLD_UXICONS_DST="/data/adb/modules/$MODID/uxicons"
 UXICONS_DST="$MODPATH/uxicons"
 
-if [ -d "$OLD_UXICONS_DST" ]; then
-  ui_print "- Found icons in module folder, migrating..."
-
-  if mv "$OLD_UXICONS_DST" "$UXICONS_DST"; then
-    ui_print "- Migration completed"
-  else
-    ui_print "- Move failed, attempting compatibility copy..."
-    mkdir -p "$UXICONS_DST"
-    if cp -af "$OLD_UXICONS_DST/." "$UXICONS_DST/"; then
-      ui_print "- Copy completed"
-    else
-      ui_print "- Critical: Migration failed"
-    fi
-  fi
-else
-  ui_print "- No icons found in module folder"
-  mkdir -p "$UXICONS_DST"
-fi
+mkdir -p "$UXICONS_DST"
 
 CIP_BIN="$MODPATH/cip"
 
