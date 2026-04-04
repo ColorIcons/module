@@ -13,6 +13,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
+use tokio::sync::Semaphore;
 
 /// 输出统一格式
 fn emit(json_mode: bool, value: serde_json::Value) {
@@ -92,6 +93,9 @@ pub async fn upgrade(
 ) -> anyhow::Result<()> {
     let installed = get_installed_packages();
     let client = Client::new();
+
+    let concurrency = config.network.concurrency.max(1);
+    let semaphore = Arc::new(Semaphore::new(concurrency));
 
     let local_index: Option<Index> = if index_path.exists() {
         fs::read(index_path)
@@ -205,9 +209,12 @@ pub async fn upgrade(
         let sha = info.sha256.clone();
         let client_clone = client.clone();
         let completed_clone = Arc::clone(&completed_tasks);
+        let semaphore_clone = Arc::clone(&semaphore);
 
         tasks.push(
             async move {
+                let _permit = semaphore_clone.acquire_owned().await.unwrap();
+
                 download_file(&client_clone, &url, &final_file, &sha, json_mode).await?;
                 let done = completed_clone.fetch_add(1, Ordering::SeqCst) + 1;
                 emit(
@@ -241,9 +248,12 @@ pub async fn upgrade(
             let sha = info.sha256.clone();
             let client_clone = client.clone();
             let completed_clone = Arc::clone(&completed_tasks);
+            let semaphore_clone = Arc::clone(&semaphore);
 
             tasks.push(
                 async move {
+                    let _permit = semaphore_clone.acquire_owned().await.unwrap();
+
                     download_file(&client_clone, &url, &final_file, &sha, json_mode).await?;
                     let done = completed_clone.fetch_add(1, Ordering::SeqCst) + 1;
                     emit(
@@ -304,17 +314,25 @@ pub async fn upgrade(
             );
             let sha = mf.sha256.clone().unwrap_or_default();
             let client_clone = client.clone();
+            let semaphore_clone = Arc::clone(&semaphore);
 
-            pkg_tasks.push(async move {
-                download_file(&client_clone, &url, &final_file, &sha, json_mode).await
-            }.boxed());
+            pkg_tasks.push(
+                async move {
+                    let _permit = semaphore_clone.acquire_owned().await.unwrap();
+
+                    download_file(&client_clone, &url, &final_file, &sha, json_mode).await
+                }
+                .boxed(),
+            );
         }
 
         let completed_clone = Arc::clone(&completed_tasks);
         let downloaded_clone = Arc::clone(&downloaded_packages);
+        let semaphore_clone = Arc::clone(&semaphore);
 
         tasks.push(
             async move {
+                let _permit = semaphore_clone.acquire_owned().await.unwrap();
                 while let Some(res) = pkg_tasks.next().await {
                     res?;
                 }
