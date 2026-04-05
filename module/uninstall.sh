@@ -1,4 +1,4 @@
-#!/system/bin/sh
+#!/bin/sh
 # ColorOSIconsPatch - uninstall.sh
 
 MODDIR="${0%/*}"

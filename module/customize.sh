@@ -1,5 +1,6 @@
-#!/system/bin/sh
-# customize.sh
+#!/bin/sh
+# ColorOSIconsPatch - customize.sh
+
 SKIPMOUNT=false
 PROPFILE=true
 POSTFSDATA=true
