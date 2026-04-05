@@ -18,40 +18,28 @@ pub struct Index {
 pub struct GlobalIndex {
     pub version: String,
     pub files: HashMap<String, FileInfo>,
-    pub packages: HashMap<String, GlobalPackageManifest>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct GlobalPackageManifest {
-    pub version: String,
-    pub files: HashMap<String, FileInfo>,
+    pub packages: HashMap<String, PackageInfo>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FileInfo {
     pub sha256: String,
     pub size: u64,
+
+    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
+    pub file_type: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub required: Option<bool>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub variant: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PackageInfo {
     pub version: String,
-    pub manifest: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Manifest {
-    pub version: String,
-    pub files: Vec<ManifestFile>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ManifestFile {
-    pub file: String,
-    #[serde(rename = "type")]
-    pub ty: String,
-    pub required: bool,
-    pub sha256: Option<String>,
-    pub size: Option<u64>,
-    pub variant: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub count: Option<u32>,
+    pub files: HashMap<String, FileInfo>,
 }

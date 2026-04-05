@@ -1,5 +1,5 @@
 use crate::config::model::{Config, Icons};
-use crate::core::types::{Index, Manifest};
+use crate::core::types::{Index};
 use crate::utils::package::get_installed_packages;
 use futures::stream::{FuturesUnordered, StreamExt};
 use futures::FutureExt;
@@ -118,6 +118,7 @@ pub async fn upgrade(
         json_mode,
         json!({"type":"stage","value":"fetch","message":"Fetching index.json"}),
     );
+
     let index_bytes = client
         .get(format!("{}/index.json", base_url))
         .send()
@@ -128,18 +129,17 @@ pub async fn upgrade(
     let remote_index: Index = serde_json::from_slice(&index_bytes)?;
 
     if !force_update && let Some(local) = &local_index
-        && local.repo_version >= remote_index.repo_version && local.generated_at >= remote_index.generated_at {
-            emit(json_mode, json!({"type":"done","message":"Already up-to-date"}));
-            return Ok(());
-        }
+        && local.repo_version >= remote_index.repo_version 
+        && local.generated_at >= remote_index.generated_at 
+    {
+        emit(json_mode, json!({"type":"done","message":"Already up-to-date"}));
+        return Ok(());
+    }
 
     let mut download_queue = Vec::new();
 
-    // Global Files
     for (name, info) in &remote_index.global.files {
-        let old = local_index
-            .as_ref()
-            .and_then(|idx| idx.global.files.get(name));
+        let old = local_index.as_ref().and_then(|idx| idx.global.files.get(name));
         if old.is_none_or(|o| o.sha256 != info.sha256) {
             download_queue.push((
                 format!("{}/global/{}", base_url, name),
@@ -149,11 +149,8 @@ pub async fn upgrade(
         }
     }
 
-    // Global Packages
     for (pkg_name, pkg) in &remote_index.global.packages {
-        let old_pkg = local_index
-            .as_ref()
-            .and_then(|idx| idx.global.packages.get(pkg_name));
+        let old_pkg = local_index.as_ref().and_then(|idx| idx.global.packages.get(pkg_name));
         for (file_name, info) in &pkg.files {
             let old_file = old_pkg.and_then(|p| p.files.get(file_name));
             if old_file.is_none_or(|o| o.sha256 != info.sha256) {
@@ -171,31 +168,24 @@ pub async fn upgrade(
         if !installed.contains_key(pkg_name) {
             continue;
         }
-        let old_ver = local_index
-            .as_ref()
+
+        let old_ver = local_index.as_ref()
             .and_then(|idx| idx.packages.get(pkg_name))
             .map(|p| &p.version);
 
         if should_download_package(force_update, old_ver, &new_info.version) {
-            let manifest_url = format!("{}/{}", base_url, new_info.manifest);
-            let m_bytes = client
-                .get(manifest_url)
-                .send()
-                .await?
-                .error_for_status()?
-                .bytes()
-                .await?;
-            let manifest: Manifest = serde_json::from_slice(&m_bytes)?;
-
-            for mf in manifest.files {
-                if let Some(v) = &mf.variant
-                    && !should_download_variant(v, &config.icons) && !mf.required {
+            for (file_name, file_info) in &new_info.files {
+                if let Some(v) = &file_info.variant {
+                    let is_required = file_info.required.unwrap_or(false);
+                    if !should_download_variant(v, &config.icons) && !is_required {
                         continue;
                     }
+                }
+
                 download_queue.push((
-                    format!("{}/packages/{}/{}", base_url, pkg_name, mf.file),
-                    storage_root.join(pkg_name).join(&mf.file),
-                    mf.sha256.clone().unwrap_or_default(),
+                    format!("{}/packages/{}/{}", base_url, pkg_name, file_name),
+                    storage_root.join(pkg_name).join(file_name),
+                    file_info.sha256.clone(),
                 ));
             }
             package_download_count += 1;
@@ -203,46 +193,44 @@ pub async fn upgrade(
     }
 
     let total_tasks = download_queue.len();
-    let completed_tasks = Arc::new(AtomicUsize::new(0));
-    let mut tasks = FuturesUnordered::new();
+    if total_tasks == 0 {
+        emit(json_mode, json!({"type":"done","message":"No files need to be updated"}));
+    } else {
+        let completed_tasks = Arc::new(AtomicUsize::new(0));
+        let mut tasks = FuturesUnordered::new();
 
-    for (url, path, sha) in download_queue {
-        let client = client.clone();
-        let semaphore = Arc::clone(&semaphore);
-        let completed = Arc::clone(&completed_tasks);
+        for (url, path, sha) in download_queue {
+            let client = client.clone();
+            let semaphore = Arc::clone(&semaphore);
+            let completed = Arc::clone(&completed_tasks);
 
-        tasks.push(
-            async move {
-                let _permit = semaphore.acquire_owned().await.unwrap(); // 只有在下载瞬间才占用信号量
+            tasks.push(async move {
+                let _permit = semaphore.acquire_owned().await.unwrap();
                 download_file(&client, &url, &path, &sha, json_mode).await?;
-
+                
                 let done = completed.fetch_add(1, Ordering::SeqCst) + 1;
-                emit(
-                    json_mode,
-                    json!({"type":"progress","value": done as f64 / total_tasks as f64}),
-                );
+                emit(json_mode, json!({
+                    "type": "progress",
+                    "value": done as f64 / total_tasks as f64
+                }));
                 Ok::<(), anyhow::Error>(())
-            }
-            .boxed(),
-        );
-    }
+            }.boxed());
+        }
 
-    while let Some(res) = tasks.next().await {
-        res?;
+        while let Some(res) = tasks.next().await {
+            res?;
+        }
     }
 
     let mut final_index = remote_index;
     final_index.icons = config.icons.clone();
     fs::write(index_path, serde_json::to_vec(&final_index)?).await?;
 
-    emit(
-        json_mode,
-        json!({
-            "type":"done",
-            "message":"Upgrade complete",
-            "packages_downloaded": package_download_count
-        }),
-    );
+    emit(json_mode, json!({
+        "type": "done",
+        "message": "Upgrade complete",
+        "packages_downloaded": package_download_count
+    }));
 
     Ok(())
 }
