@@ -1,4 +1,6 @@
-use crate::cli::{check::CheckCmd, config::ConfigCmd, list::ListCmd, upgrade::UpgradeCmd};
+use crate::cli::{
+    check::CheckCmd, config::ConfigCmd, list::ListCmd, package::PackageCmd, upgrade::UpgradeCmd,
+};
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -11,11 +13,20 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
+    /// Check for updates
     Check(CheckCmd),
+    /// List installed icons
     List(ListCmd),
+    /// Upgrade installed icons
     Upgrade(UpgradeCmd),
+    /// Config
     Config {
         #[command(subcommand)]
         cmd: ConfigCmd,
+    },
+    /// Package
+    Package {
+        #[command(subcommand)]
+        cmd: PackageCmd,
     },
 }

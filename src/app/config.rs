@@ -13,7 +13,7 @@ mat = false
 monochrome = true
 
 [network]
-concurrency = 4
+concurrency = 16
 
 [repo]
 base_url = "https://coloricons.github.io/icons/"

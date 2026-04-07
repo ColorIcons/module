@@ -1,7 +1,16 @@
-use crate::utils::{monet_scan, package::get_installed_packages};
+use crate::{
+    core::types::Index,
+    utils::{monet_scan, package::get_installed_packages},
+};
 use rayon::prelude::*;
 use serde::Serialize;
-use std::{borrow::Cow, path::Path};
+use std::{
+    borrow::Cow,
+    collections::{HashMap, HashSet},
+    path::Path,
+    process::Command,
+};
+use tokio::fs;
 use walkdir::WalkDir;
 
 #[derive(Debug, Clone, Serialize)]
@@ -13,6 +22,62 @@ pub struct AppInfo {
     pub mat_icon: Option<String>,
     pub is_adapted: bool,
     pub is_monet_supported_natively: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PackageMatch {
+    pub pkg_name: String,
+    pub apk_path: String,
+    pub is_global: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PackageInfo {
+    pub package_name: String,
+    pub is_adapted: bool,
+}
+
+async fn get_installed_packages_with_global(index: &Index) -> anyhow::Result<Vec<PackageMatch>> {
+    let output = Command::new("pm")
+        .args(["list", "packages", "-f"])
+        .output()
+        .expect("无法执行 pm list packages");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut all_installed = HashMap::new();
+    for line in stdout.lines() {
+        if let Some((apk_part, pkg_name)) = line.rsplit_once('=')
+            && let Some(apk_path) = apk_part.strip_prefix("package:")
+        {
+            all_installed.insert(pkg_name.to_string(), apk_path.to_string());
+        }
+    }
+    let output = Command::new("pm")
+        .args(["list", "packages", "-3"])
+        .output()
+        .expect("无法执行 pm list packages");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut user_installed = HashSet::new();
+    for line in stdout.lines() {
+        if let Some(pkg_name) = line.strip_prefix("package:") {
+            user_installed.insert(pkg_name.trim().to_string());
+        }
+    }
+    let mut results = Vec::new();
+
+    for (pkg_name, apk_path) in all_installed {
+        let in_global = index.global.packages.contains_key(&pkg_name);
+        let in_user = user_installed.contains(&pkg_name);
+
+        if in_global || in_user {
+            results.push(PackageMatch {
+                pkg_name,
+                apk_path,
+                is_global: in_global,
+            })
+        }
+    }
+    Ok(results)
 }
 
 fn get_adapted_packages(uxicons_path: &str) -> Vec<String> {
@@ -34,6 +99,34 @@ fn get_adapted_packages(uxicons_path: &str) -> Vec<String> {
             }
         })
         .collect()
+}
+
+pub async fn get_packages_list(
+    index: &Index,
+    storage_root: &Path,
+) -> anyhow::Result<Vec<PackageInfo>> {
+    let mut adapted_pkgs = HashSet::new();
+    if storage_root.exists() {
+        let mut entries = fs::read_dir(storage_root).await?;
+        while let Some(entry) = entries.next_entry().await? {
+            if entry.file_type().await?.is_dir()
+                && let Some(name) = entry.file_name().to_str() {
+                    adapted_pkgs.insert(name.to_string());
+                }
+        }
+    }
+
+    let pkgs = get_installed_packages_with_global(index).await?;
+    let mut results: Vec<PackageInfo> = Vec::new();
+
+    for pkg in pkgs {
+        results.push(PackageInfo {
+            package_name: pkg.pkg_name.clone(),
+            is_adapted: adapted_pkgs.contains(&pkg.pkg_name),
+        })
+    }
+
+    Ok(results)
 }
 
 pub fn run(uxicons_path: &str, json_mode: bool) {

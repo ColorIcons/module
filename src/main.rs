@@ -4,7 +4,7 @@ mod config;
 mod core;
 mod utils;
 
-use crate::cli::{config::ConfigCmd, root::Commands};
+use crate::cli::{config::ConfigCmd, package::PackageCmd, root::Commands};
 use clap::Parser;
 use cli::root::Cli;
 
@@ -19,6 +19,9 @@ async fn main() -> anyhow::Result<()> {
             ConfigCmd::Init(()) => app::config::init()?,
             ConfigCmd::Get(c) => app::config::get(c)?,
             ConfigCmd::Set(c) => app::config::set(c)?,
+        },
+        Commands::Package { cmd } => match cmd {
+            PackageCmd::List(c) => app::package::run_package_list(c).await?,
         },
     }
     Ok(())
