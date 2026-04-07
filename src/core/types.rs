@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::model::Icons;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Index {
     pub repo_version: u32,
     pub generated_at: u64,
@@ -14,7 +14,7 @@ pub struct Index {
     pub icons: Icons,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct GlobalIndex {
     pub version: String,
     pub files: HashMap<String, FileInfo>,
