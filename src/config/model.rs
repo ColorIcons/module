@@ -12,6 +12,9 @@ pub static CONFIG_PATH: Lazy<PathBuf> =
 pub static INDEX_FILE_PATH: Lazy<PathBuf> =
     Lazy::new(|| PathBuf::from("/data/adb/ColorOSIconsPatch/index.json"));
 
+pub static PACKAGE_LIST_PATH: Lazy<PathBuf> =
+    Lazy::new(|| PathBuf::from("/data/adb/ColorOSIconsPatch/package_list.json"));
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
     pub icons: Icons,

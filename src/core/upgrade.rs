@@ -6,6 +6,7 @@ use futures::FutureExt;
 use reqwest::Client;
 use serde_json::json;
 use sha2::{Digest, Sha256};
+use std::collections::HashSet;
 use std::fs::Permissions;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
@@ -87,14 +88,30 @@ fn should_download_package(force_update: bool, old_ver: Option<&String>, new_ver
     force_update || old_ver.is_none_or(|v| v != new_ver)
 }
 
+async fn save_package_list(path: &Path, pkgs: &HashSet<String>) -> anyhow::Result<()> {
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+
+    let tmp = path.with_extension("tmp");
+
+    tokio::fs::write(&tmp, serde_json::to_vec(pkgs)?).await?;
+    tokio::fs::rename(tmp, path).await?;
+
+    Ok(())
+}
+
 pub async fn upgrade(
     base_url: &str,
     storage_root: &Path,
     index_path: &Path,
+    package_list_path: &Path,
     config: &Config,
     json_mode: bool,
 ) -> anyhow::Result<()> {
-    let installed = get_installed_packages();
+    let installed_map = get_installed_packages();
+    let installed_set: HashSet<String> = installed_map.keys().cloned().collect();
+
     let client = Client::new();
     let base_url = base_url.trim_end_matches('/');
 
@@ -165,7 +182,7 @@ pub async fn upgrade(
 
     let mut package_download_count = 0;
     for (pkg_name, new_info) in &remote_index.packages {
-        if !installed.contains_key(pkg_name) {
+        if !installed_map.contains_key(pkg_name) {
             continue;
         }
 
@@ -224,7 +241,11 @@ pub async fn upgrade(
 
     let mut final_index = remote_index;
     final_index.icons = config.icons.clone();
-    fs::write(index_path, serde_json::to_vec(&final_index)?).await?;
+    let tmp = index_path.with_extension("tmp");
+
+    fs::write(&tmp, serde_json::to_vec(&final_index)?).await?;
+    fs::rename(tmp, index_path).await?;
+    save_package_list(package_list_path, &installed_set).await?;
 
     emit(json_mode, json!({
         "type": "done",

@@ -13,8 +13,9 @@ pub async fn run(cmd: CheckCmd) -> anyhow::Result<()> {
 
     let config = loader::load(path)?;
     let index = model::INDEX_FILE_PATH.clone();
+    let package_list = model::PACKAGE_LIST_PATH.clone();
 
-    check::check(&config, &index, cmd.json).await?;
+    check::check(&config, &index, &package_list, cmd.json).await?;
 
     Ok(())
 }
