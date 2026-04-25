@@ -88,6 +88,15 @@ fn should_download_package(force_update: bool, old_ver: Option<&String>, new_ver
     force_update || old_ver.is_none_or(|v| v != new_ver)
 }
 
+async fn load_package_list(path: &Path) -> Option<HashSet<String>> {
+    if !path.exists() {
+        return None;
+    }
+
+    let data = fs::read(path).await.ok()?;
+    serde_json::from_slice::<HashSet<String>>(&data).ok()
+}
+
 async fn save_package_list(path: &Path, pkgs: &HashSet<String>) -> anyhow::Result<()> {
     if let Some(parent) = path.parent() {
         tokio::fs::create_dir_all(parent).await?;
@@ -112,6 +121,12 @@ pub async fn upgrade(
     let installed_map = get_installed_packages();
     let installed_set: HashSet<String> = installed_map.keys().cloned().collect();
 
+   let old_set = load_package_list(package_list_path).await;
+    let package_list_changed = match &old_set {
+        Some(old) => *old != installed_set,
+        None => true,
+    };
+
     let client = Client::new();
     let base_url = base_url.trim_end_matches('/');
 
@@ -127,9 +142,13 @@ pub async fn upgrade(
         None
     };
 
-    let force_update = local_index
+    let mut force_update = local_index
         .as_ref()
         .is_none_or(|idx| idx.icons != config.icons);
+
+    if package_list_changed {
+        force_update = true;
+    }
 
     emit(
         json_mode,
